@@ -2,14 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Lengbin\Hyperf\Auth\Method;
+namespace Lengbin\Auth\Method;
 
-use Hyperf\Config\Annotation\Value;
 use Lengbin\Helper\YiiSoft\Arrays\ArrayHelper;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Lengbin\Hyperf\Auth\AuthInterface;
-use Lengbin\Hyperf\Auth\IdentityInterface;
+use Lengbin\Auth\AuthInterface;
+use Lengbin\Auth\IdentityInterface;
 
 class SignAuth implements AuthInterface, IdentityInterface
 {
@@ -18,26 +17,23 @@ class SignAuth implements AuthInterface, IdentityInterface
     public $timestampParam = 'timestamp';
 
     /**
-     * @Value("auth")
-     */
-    protected $config;
-
-    /**
      * Authenticates the current user.
      *
-     * @param ServerRequestInterface $request
+     * @param RequestInterface $request
      *
      * @return null|IdentityInterface
      */
     public function authenticate(ServerRequestInterface $request): ?IdentityInterface
     {
-        $secretKey = ArrayHelper::getValue($this->config, 'secretKey');
-        if (is_null($secretKey)) {
-            return $this;
-        }
         $gets = $request->getQueryParams();
         $posts = $request->getParsedBody();
         $params = array_merge($gets, $posts);
+
+        $secretKey = ArrayHelper::getValue($params, 'secretKey');
+        if (is_null($secretKey)) {
+            return $this;
+        }
+
         $sign = ArrayHelper::remove($params, $this->signParam);
         $timestamp = ArrayHelper::remove($params, $this->timestampParam);
 
@@ -86,7 +82,7 @@ class SignAuth implements AuthInterface, IdentityInterface
      * Returns an ID that can uniquely identify a user identity.
      * @return string an ID that uniquely identifies a user identity.
      */
-    public function getId(): ?string
+    public function getId()
     {
         return 'true';
     }

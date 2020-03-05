@@ -1,12 +1,12 @@
 <?php
 declare(strict_types=1);
 
-namespace Lengbin\Hyperf\Auth\Method;
+namespace Lengbin\Auth\Method;
 
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Lengbin\Hyperf\Auth\AuthInterface;
-use Lengbin\Hyperf\Auth\IdentityInterface;
+use Lengbin\Auth\AuthInterface;
+use Lengbin\Auth\IdentityInterface;
 use Psr\Container\ContainerInterface;
 
 /**

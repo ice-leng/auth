@@ -3,11 +3,11 @@ declare(strict_types=1);
 
 namespace Lengbin\Hyperf\Auth\Middleware;
 
-use Lengbin\Hyperf\Auth\IdentityInterface;
-use Lengbin\Hyperf\Auth\IdentityRepositoryInterface;
-use Lengbin\Hyperf\Auth\Method\CompositeAuth;
-use Lengbin\Hyperf\Auth\User\GuestIdentity;
-use Lengbin\Hyperf\Auth\User\User;
+use Lengbin\Auth\IdentityInterface;
+use Lengbin\Auth\IdentityRepositoryInterface;
+use Lengbin\Auth\Method\CompositeAuth;
+use Lengbin\Auth\User\GuestIdentity;
+use Lengbin\Auth\User\User;
 use Psr\Container\ContainerInterface;
 use Psr\Http\Message\RequestInterface;
 
