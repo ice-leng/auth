@@ -84,6 +84,6 @@ class SignAuth implements AuthInterface, IdentityInterface
      */
     public function getId()
     {
-        return 'true';
+        return 1;
     }
 }
