@@ -44,13 +44,10 @@ class User implements UserInterface
      */
     private $eventDispatcher;
 
-    public function __construct(ContainerInterface $container, IdentityRepositoryInterface $identityRepository, EventDispatcherInterface $eventDispatcher = null)
+    public function __construct(ContainerInterface $container, IdentityRepositoryInterface $identityRepository, EventDispatcherInterface $eventDispatcher)
     {
         $this->container = $container;
         $this->identityRepository = $identityRepository;
-        if ($eventDispatcher === null) {
-            $eventDispatcher = $container->get(EventDispatcherInterface::class);
-        }
         $this->eventDispatcher = $eventDispatcher;
     }
 

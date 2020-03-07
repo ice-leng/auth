@@ -19,7 +19,7 @@ class SignAuth implements AuthInterface, IdentityInterface
     /**
      * Authenticates the current user.
      *
-     * @param RequestInterface $request
+     * @param ServerRequestInterface $request
      *
      * @return null|IdentityInterface
      */
