@@ -86,7 +86,7 @@ abstract class AbstractAuth
         }
 
         if (is_array($method)) {
-            $authenticator = new CompositeAuth($this->container);
+            $authenticator = new CompositeAuth($identityRepository);
             $authenticator->setAuthMethods($method);
         } else {
             $authenticator = new $method($identityRepository);

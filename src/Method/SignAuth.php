@@ -86,4 +86,15 @@ class SignAuth implements AuthInterface, IdentityInterface
     {
         return 1;
     }
+    
+    /**
+     * 设置 获得参数名称
+     * @param string|null $name
+     *
+     * @return mixed
+     */
+    public function setName(string $name)
+    {
+
+    }
 }

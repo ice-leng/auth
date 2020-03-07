@@ -3,11 +3,11 @@ declare(strict_types=1);
 
 namespace Lengbin\Auth\Method;
 
+use Lengbin\Auth\IdentityRepositoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Lengbin\Auth\AuthInterface;
 use Lengbin\Auth\IdentityInterface;
-use Psr\Container\ContainerInterface;
 
 /**
  * CompositeAuth allows multiple authentication methods at the same time.
@@ -22,26 +22,39 @@ final class CompositeAuth implements AuthInterface
      */
     private $authMethods = [];
     /**
-     * @var ContainerInterface
+     * @var IdentityRepositoryInterface
      */
-    private $container;
+    protected $identityRepository;
 
-    public function __construct(ContainerInterface $container)
+    public function __construct(IdentityRepositoryInterface $identityRepository)
     {
-        $this->container = $container;
+        $this->identityRepository = $identityRepository;
+    }
+
+    /**
+     * 设置 获得参数名称
+     * @param string|null $name
+     *
+     * @return mixed
+     */
+    public function setName(string $name)
+    {
+
     }
 
     public function authenticate(ServerRequestInterface $request): ?IdentityInterface
     {
-        foreach ($this->authMethods as $i => $auth) {
-            if (!$auth instanceof AuthInterface) {
-                $this->authMethods[$i] = $auth = $this->container->get($auth);
+        foreach ($this->authMethods as $i => $class) {
+            if (!$class instanceof AuthInterface) {
+                $this->authMethods[$i] = $auth = new $class($this->identityRepository);
                 if (!$auth instanceof AuthInterface) {
-                    throw new \RuntimeException(get_class($auth) . ' must implement ' . AuthInterface::class);
+                    throw new \RuntimeException(get_class($class) . ' must implement ' . AuthInterface::class);
                 }
             }
-
-            $identity = $auth->authenticate($request);
+            if (is_string($i)) {
+                $this->authMethods[$i]->setName($i);
+            }
+            $identity = $this->authMethods[$i]->authenticate($request);
             if ($identity !== null) {
                 return $identity;
             }

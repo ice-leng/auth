@@ -12,6 +12,15 @@ use Psr\Http\Message\ServerRequestInterface;
  */
 interface AuthInterface
 {
+
+    /**
+     * 设置 获得参数名称
+     * @param string|null $name
+     *
+     * @return mixed
+     */
+    public function setName(string $name);
+
     /**
      * Authenticates the current user.
      * @param ServerRequestInterface $request

@@ -54,7 +54,7 @@ class HttpHeaderAuth implements AuthInterface
         return $response;
     }
 
-    public function setHeaderName(string $name): void
+    public function setName(string $name): void
     {
         $this->headerName = $name;
     }

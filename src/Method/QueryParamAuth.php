@@ -44,7 +44,7 @@ final class QueryParamAuth implements AuthInterface
         return $response;
     }
 
-    public function setTokenParam(string $param): void
+    public function setName(string $param): void
     {
         $this->tokenParam = $param;
     }
