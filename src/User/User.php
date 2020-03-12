@@ -37,7 +37,12 @@ class User implements UserInterface
     /**
      * @var $session
      */
-    private $session;
+    public $session = 'session';
+
+    /**
+     * @var string
+     */
+    public $accessChecker = 'Lengbin\Auth\User\AccessCheckerInterface';
 
     /**
      * @var EventDispatcherInterface
@@ -57,11 +62,15 @@ class User implements UserInterface
      * for stateless application such as RESTful API.
      *
      * @param $session
+     *
+     * @return string
      */
     public function getSession()
     {
-        if ($this->session === null && $this->container->has('session')) {
-            $this->session = $this->container->get('session');
+        $session = $this->session;
+        $this->session = null;
+        if ($this->container->has($session)) {
+            $this->session = $this->container->get($session);
         }
         return $this->session;
     }
@@ -342,6 +351,14 @@ class User implements UserInterface
         }
     }
 
+    protected function getAccessChecker()
+    {
+        if (is_string($this->accessChecker) && $this->container->has($this->accessChecker)) {
+            $this->accessChecker = $this->container->get($this->accessChecker);
+        }
+        return $this->accessChecker;
+    }
+
     /**
      * Checks if the user can perform the operation as specified by the given permission.
      *
@@ -356,9 +373,9 @@ class User implements UserInterface
      */
     public function can(string $permissionName, array $params = []): bool
     {
-        if (!$this->container->has(AccessCheckerInterface::class)) {
+        if (!$this->getAccessChecker() instanceof AccessCheckerInterface) {
             return false;
         }
-        return $this->container->get(AccessCheckerInterface::class)->hasPermission($this->getId(), $permissionName, $params);
+        return $this->getAccessChecker()->userHasPermission($this->getId(), $permissionName, $params);
     }
 }
