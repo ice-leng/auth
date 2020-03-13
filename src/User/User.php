@@ -67,10 +67,8 @@ class User implements UserInterface
      */
     public function getSession()
     {
-        $session = $this->session;
-        $this->session = null;
-        if ($this->container->has($session)) {
-            $this->session = $this->container->get($session);
+        if (is_string($this->session) && $this->container->has($this->session)) {
+            $this->session = $this->container->get($this->session);
         }
         return $this->session;
     }
