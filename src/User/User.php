@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Lengbin\Auth\User;
 
-use Psr\Container\ContainerInterface;
+use Lengbin\Auth\AuthSessionInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Lengbin\Auth\IdentityInterface;
 use Lengbin\Auth\IdentityRepositoryInterface;
@@ -20,14 +20,18 @@ class User implements UserInterface
     private const SESSION_AUTH_ABSOLUTE_EXPIRE = '__auth_absolute_expire';
 
     /**
-     * @var ContainerInterface
-     */
-    private $container;
-
-    /**
      * @var IdentityRepositoryInterface
      */
     private $identityRepository;
+    /**
+     * @var EventDispatcherInterface
+     */
+    private $eventDispatcher;
+
+    /**
+     * @var AccessCheckerInterface
+     */
+    private $accessChecker;
 
     /**
      * @var IdentityInterface
@@ -35,26 +39,29 @@ class User implements UserInterface
     private $identity;
 
     /**
-     * @var $session
+     * @var AuthSessionInterface
      */
-    public $session = 'session';
+    private $session;
 
-    /**
-     * @var string
-     */
-    public $accessChecker = 'Lengbin\Auth\User\AccessCheckerInterface';
-
-    /**
-     * @var EventDispatcherInterface
-     */
-    private $eventDispatcher;
-
-    public function __construct(ContainerInterface $container, IdentityRepositoryInterface $identityRepository, EventDispatcherInterface $eventDispatcher)
+    public function __construct(IdentityRepositoryInterface $identityRepository, EventDispatcherInterface $eventDispatcher)
     {
-        $this->container = $container;
         $this->identityRepository = $identityRepository;
         $this->eventDispatcher = $eventDispatcher;
     }
+
+    /**
+     * @var int|null the number of seconds in which the user will be logged out automatically if he
+     * remains inactive. If this property is not set, the user will be logged out after
+     * the current session expires (c.f. [[Session::timeout]]).
+     */
+    public $authTimeout = null;
+
+    /**
+     * @var int|null the number of seconds in which the user will be logged out automatically
+     * regardless of activity.
+     * Note that this will not work if [[enableAutoLogin]] is `true`.
+     */
+    public $absoluteAuthTimeout = null;
 
     /**
      * Set session to persist authentication status across multiple requests.
@@ -62,37 +69,28 @@ class User implements UserInterface
      * for stateless application such as RESTful API.
      *
      * @param $session
-     *
-     * @return string
      */
-    public function getSession()
+    public function setSession(AuthSessionInterface $session): void
     {
-        if (is_string($this->session) && $this->container->has($this->session)) {
-            $this->session = $this->container->get($this->session);
-        }
-        return $this->session;
+        $this->session = $session;
     }
 
     /**
-     * @var int the number of seconds in which the user will be logged out automatically if he
-     * remains inactive. If this property is not set, the user will be logged out after
-     * the current session expires (c.f. [[Session::timeout]]).
+     * @param AccessCheckerInterface $accessChecker
      */
-    public $authTimeout;
-
-    /**
-     * @var int the number of seconds in which the user will be logged out automatically
-     * regardless of activity.
-     * Note that this will not work if [[enableAutoLogin]] is `true`.
-     */
-    public $absoluteAuthTimeout;
+    public function setAccessChecker(AccessCheckerInterface $accessChecker): void
+    {
+        $this->accessChecker = $accessChecker;
+    }
 
     /**
      * Returns the identity object associated with the currently logged-in user.
      * When [[enableSession]] is true, this method may attempt to read the user's authentication data
      * stored in session and reconstruct the corresponding identity object, if it has not done so before.
+     *
      * @param bool $autoRenew whether to automatically renew authentication status if it has not been done so before.
-     * This is only useful when [[enableSession]] is true.
+     *                        This is only useful when [[enableSession]] is true.
+     *
      * @return IdentityInterface the identity object associated with the currently logged-in user.
      * @throws \Throwable
      * @see logout()
@@ -100,18 +98,17 @@ class User implements UserInterface
      */
     public function getIdentity($autoRenew = true): IdentityInterface
     {
-        if ($this->identity === null) {
-            if ($this->getSession() !== null && $autoRenew) {
-                try {
-                    $this->identity = null;
-                    $this->renewAuthStatus();
-                } catch (\Throwable $e) {
-                    $this->identity = null;
-                    throw $e;
-                }
-            } else {
-                return new GuestIdentity();
-            }
+        if ($this->identity !== null) {
+            return $this->identity;
+        }
+        if ($this->session === null || !$autoRenew) {
+            return new GuestIdentity();
+        }
+        try {
+            $this->renewAuthStatus();
+        } catch (\Throwable $e) {
+            $this->identity = null;
+            throw $e;
         }
         return $this->identity;
     }
@@ -123,7 +120,7 @@ class User implements UserInterface
      * to change the identity of the current user.
      *
      * @param IdentityInterface|null $identity the identity object associated with the currently logged user.
-     * Use {{@see GuestIdentity}} to indicate that the current user is a guest.
+     *                                         Use {{@see GuestIdentity}} to indicate that the current user is a guest.
      */
     public function setIdentity(IdentityInterface $identity): void
     {
@@ -146,13 +143,14 @@ class User implements UserInterface
      * - the `$duration` parameter will be ignored
      *
      * @param IdentityInterface $identity the user identity (which should already be authenticated)
-     * @param int $duration number of seconds that the user can remain in logged-in status, defaults to `0`
+     * @param int               $duration number of seconds that the user can remain in logged-in status, defaults to `0`
+     *
      * @return bool whether the user is logged in
      */
-    public function login(IdentityInterface $identity, $duration = 0)
+    public function login(IdentityInterface $identity, int $duration = 0): bool
     {
         if ($this->beforeLogin($identity, $duration)) {
-            $this->switchIdentity($identity);
+            $this->switchIdentity($identity, $duration);
             $this->afterLogin($identity, $duration);
         }
         return !$this->isGuest();
@@ -163,13 +161,15 @@ class User implements UserInterface
      * This method will first authenticate the user by calling [[IdentityInterface::findIdentityByAccessToken()]]
      * with the provided access token. If successful, it will call [[login()]] to log in the authenticated user.
      * If authentication fails or [[login()]] is unsuccessful, it will return null.
+     *
      * @param string $token the access token
-     * @param mixed $type the type of the token. The value of this parameter depends on the implementation.
-     * For example, [[\yii\filters\auth\HttpBearerAuth]] will set this parameter to be `yii\filters\auth\HttpBearerAuth`.
+     * @param string $type  the type of the token. The value of this parameter depends on the implementation.
+     *                      For example, [[\yii\filters\auth\HttpBearerAuth]] will set this parameter to be `yii\filters\auth\HttpBearerAuth`.
+     *
      * @return IdentityInterface|null the identity associated with the given access token. Null is returned if
      * the access token is invalid or [[login()]] is unsuccessful.
      */
-    public function loginByAccessToken($token, $type = ''): ?IdentityInterface
+    public function loginByAccessToken(string $token, string $type = null): ?IdentityInterface
     {
         $identity = $this->identityRepository->findIdentityByToken($token, $type);
         if ($identity && $this->login($identity)) {
@@ -182,18 +182,23 @@ class User implements UserInterface
      * Logs out the current user.
      * This will remove authentication-related session data.
      * If `$destroySession` is true, all session data will be removed.
+     *
      * @param bool $destroySession whether to destroy the whole session. Defaults to true.
-     * This parameter is ignored if [[enableSession]] is false.
+     *                             This parameter is ignored if [[enableSession]] is false.
+     *
      * @return bool whether the user is logged out
      * @throws \Throwable
      */
     public function logout($destroySession = true): bool
     {
         $identity = $this->getIdentity();
-        if (!$this->isGuest() && $this->beforeLogout($identity)) {
+        if ($this->isGuest()) {
+            return false;
+        }
+        if ($this->beforeLogout($identity)) {
             $this->switchIdentity(new GuestIdentity());
-            if ($destroySession && $this->getSession()) {
-                $this->getSession()->destroy();
+            if ($destroySession && $this->session) {
+                $this->session->destroy();
             }
             $this->afterLogout($identity);
         }
@@ -203,11 +208,12 @@ class User implements UserInterface
     /**
      * Returns a value indicating whether the user is a guest (not authenticated).
      * @return bool whether the current user is a guest.
+     * @throws \Throwable
      * @see getIdentity()
      */
     public function isGuest(): bool
     {
-        return $this->identity instanceof GuestIdentity;
+        return $this->getIdentity() instanceof GuestIdentity;
     }
 
     /**
@@ -226,9 +232,11 @@ class User implements UserInterface
      * The default implementation will trigger the [[EVENT_BEFORE_LOGIN]] event.
      * If you override this method, make sure you call the parent implementation
      * so that the event is triggered.
+     *
      * @param IdentityInterface $identity the user identity information
-     * @param int $duration number of seconds that the user can remain in logged-in status.
-     * If 0, it means login till the user closes the browser or the session is manually destroyed.
+     * @param int               $duration number of seconds that the user can remain in logged-in status.
+     *                                    If 0, it means login till the user closes the browser or the session is manually destroyed.
+     *
      * @return bool whether the user should continue to be logged in
      */
     protected function beforeLogin(IdentityInterface $identity, int $duration): bool
@@ -243,9 +251,10 @@ class User implements UserInterface
      * The default implementation will trigger the [[EVENT_AFTER_LOGIN]] event.
      * If you override this method, make sure you call the parent implementation
      * so that the event is triggered.
+     *
      * @param IdentityInterface $identity the user identity information
-     * @param int $duration number of seconds that the user can remain in logged-in status.
-     * If 0, it means login till the user closes the browser or the session is manually destroyed.
+     * @param int               $duration number of seconds that the user can remain in logged-in status.
+     *                                    If 0, it means login till the user closes the browser or the session is manually destroyed.
      */
     protected function afterLogin(IdentityInterface $identity, int $duration): void
     {
@@ -257,7 +266,9 @@ class User implements UserInterface
      * The default implementation will trigger the [[EVENT_BEFORE_LOGOUT]] event.
      * If you override this method, make sure you call the parent implementation
      * so that the event is triggered.
+     *
      * @param IdentityInterface $identity the user identity information
+     *
      * @return bool whether the user should continue to be logged out
      */
     protected function beforeLogout(IdentityInterface $identity): bool
@@ -272,9 +283,10 @@ class User implements UserInterface
      * The default implementation will trigger the [[EVENT_AFTER_LOGOUT]] event.
      * If you override this method, make sure you call the parent implementation
      * so that the event is triggered.
+     *
      * @param IdentityInterface $identity the user identity information
      */
-    protected function afterLogout($identity): void
+    protected function afterLogout(IdentityInterface $identity): void
     {
         $this->eventDispatcher->dispatch(new AfterLogoutEvent($identity));
     }
@@ -289,28 +301,31 @@ class User implements UserInterface
      * when the current user needs to be associated with the corresponding identity information.
      *
      * @param IdentityInterface $identity the identity information to be associated with the current user.
-     * In order to indicate that the user is guest, use {{@see GuestIdentity}}.
+     *                                    In order to indicate that the user is guest, use {{@see GuestIdentity}}.
+     * @param int               $duration
      */
-    public function switchIdentity(IdentityInterface $identity): void
+    public function switchIdentity(IdentityInterface $identity, int $duration = 0): void
     {
         $this->setIdentity($identity);
-        if ($this->getSession() === null) {
+        if ($this->session === null) {
             return;
         }
 
-        $this->getSession()->regenerateID();
+        $this->session->remove(self::SESSION_AUTH_ID);
+        $this->session->remove(self::SESSION_AUTH_EXPIRE);
 
-        $this->getSession()->remove(self::SESSION_AUTH_ID);
-        $this->getSession()->remove(self::SESSION_AUTH_EXPIRE);
-
-        if ($identity->getId() !== null) {
-            $this->getSession()->set(self::SESSION_AUTH_ID, $identity->getId());
-            if ($this->authTimeout !== null) {
-                $this->getSession()->set(self::SESSION_AUTH_EXPIRE, time() + $this->authTimeout);
-            }
-            if ($this->absoluteAuthTimeout !== null) {
-                $this->getSession()->set(self::SESSION_AUTH_ABSOLUTE_EXPIRE, time() + $this->absoluteAuthTimeout);
-            }
+        if ($identity->getId() === null) {
+            return;
+        }
+        $this->session->set(self::SESSION_AUTH_ID, $identity->getId());
+        if ($this->authTimeout !== null) {
+            $this->session->set(self::SESSION_AUTH_EXPIRE, time() + $this->authTimeout);
+        }
+        if ($duration > 0) {
+            $this->session->set(self::SESSION_AUTH_EXPIRE, time() + $duration);
+        }
+        if ($this->absoluteAuthTimeout !== null) {
+            $this->session->set(self::SESSION_AUTH_ABSOLUTE_EXPIRE, time() + $this->absoluteAuthTimeout);
         }
     }
 
@@ -327,7 +342,7 @@ class User implements UserInterface
      */
     protected function renewAuthStatus(): void
     {
-        $id = $this->getSession()->get(self::SESSION_AUTH_ID);
+        $id = $this->session->get(self::SESSION_AUTH_ID);
 
         $identity = null;
         if ($id !== null) {
@@ -339,22 +354,14 @@ class User implements UserInterface
         $this->setIdentity($identity);
 
         if (!($identity instanceof GuestIdentity) && ($this->authTimeout !== null || $this->absoluteAuthTimeout !== null)) {
-            $expire = $this->authTimeout !== null ? $this->getSession()->get(self::SESSION_AUTH_ABSOLUTE_EXPIRE) : null;
-            $expireAbsolute = $this->absoluteAuthTimeout !== null ? $this->getSession()->get(self::SESSION_AUTH_ABSOLUTE_EXPIRE) : null;
+            $expire = $this->authTimeout !== null ? $this->session->get(self::SESSION_AUTH_ABSOLUTE_EXPIRE) : null;
+            $expireAbsolute = $this->absoluteAuthTimeout !== null ? $this->session->get(self::SESSION_AUTH_ABSOLUTE_EXPIRE) : null;
             if (($expire !== null && $expire < time()) || ($expireAbsolute !== null && $expireAbsolute < time())) {
                 $this->logout(false);
             } elseif ($this->authTimeout !== null) {
-                $this->getSession()->set(self::SESSION_AUTH_EXPIRE, time() + $this->authTimeout);
+                $this->session->set(self::SESSION_AUTH_EXPIRE, time() + $this->authTimeout);
             }
         }
-    }
-
-    protected function getAccessChecker()
-    {
-        if (is_string($this->accessChecker) && $this->container->has($this->accessChecker)) {
-            $this->accessChecker = $this->container->get($this->accessChecker);
-        }
-        return $this->accessChecker;
     }
 
     /**
@@ -364,16 +371,18 @@ class User implements UserInterface
      * Otherwise it will always return false.
      *
      * @param string $permissionName the name of the permission (e.g. "edit post") that needs access check.
-     * @param array $params name-value pairs that would be passed to the rules associated
-     * with the roles and permissions assigned to the user.
+     * @param array  $params         name-value pairs that would be passed to the rules associated
+     *                               with the roles and permissions assigned to the user.
+     *
      * @return bool whether the user can perform the operation as specified by the given permission.
      * @throws \Throwable
      */
     public function can(string $permissionName, array $params = []): bool
     {
-        if (!$this->getAccessChecker() instanceof AccessCheckerInterface) {
+        if ($this->accessChecker === null) {
             return false;
         }
-        return $this->getAccessChecker()->userHasPermission($this->getId(), $permissionName, $params);
+
+        return $this->accessChecker->userHasPermission($this->getId(), $permissionName, $params);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Lengbin\Auth\User;
 
+use Lengbin\Auth\AuthSessionInterface;
 use Lengbin\Auth\IdentityInterface;
 
 interface UserInterface
@@ -58,4 +59,18 @@ interface UserInterface
      * @return mixed
      */
     public function can(string $permissionName, array $params = []);
+
+    /**
+     * Set session to persist authentication status across multiple requests.
+     * If not set, authentication has to be performed on each request, which is often the case
+     * for stateless application such as RESTful API.
+     *
+     * @param $session
+     */
+    public function setSession(AuthSessionInterface $session): void;
+
+    /**
+     * @param AccessCheckerInterface $accessChecker
+     */
+    public function setAccessChecker(AccessCheckerInterface $accessChecker): void;
 }

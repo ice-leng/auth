@@ -153,7 +153,7 @@ abstract class AbstractAuth
     {
         $guestIdentity = new GuestIdentity();
         $identityClass = $this->getIdentityClass();
-        $user = new User($this->container, $identityClass, $this->eventDispatcher);
+        $user = new User($identityClass, $this->eventDispatcher);
         $user->setIdentity($guestIdentity);
         if ($isPublic) {
             return $user;
