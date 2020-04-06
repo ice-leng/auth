@@ -17,7 +17,7 @@ interface UserInterface
      *
      * @return mixed
      */
-    public function login(IdentityInterface $identity, $duration = 0);
+    public function login(IdentityInterface $identity, int $duration = 0);
 
     /**
      * logout
