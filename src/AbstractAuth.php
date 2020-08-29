@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Lengbin\Auth;
 
+use Lengbin\Auth\Exception\InvalidArgumentException;
 use Lengbin\Auth\Method\CompositeAuth;
 use Lengbin\Auth\User\GuestIdentity;
 use Lengbin\Auth\User\User;
@@ -66,11 +67,11 @@ abstract class AbstractAuth
     {
         $class = ArrayHelper::getValue($this->getConfig(), 'identityClass');
         if ($class === null) {
-            throw new \InvalidArgumentException('Please set auth config identityClass params');
+            throw new InvalidArgumentException('Please set auth config identityClass params');
         }
         $model = new $class;
         if (!$model instanceof IdentityRepositoryInterface) {
-            throw new \InvalidArgumentException($class . ' must implement ' . IdentityRepositoryInterface::class);
+            throw new InvalidArgumentException($class . ' must implement ' . IdentityRepositoryInterface::class);
         }
         return $model;
     }
@@ -82,7 +83,7 @@ abstract class AbstractAuth
     {
         $method = ArrayHelper::getValue($this->getConfig(), 'method');
         if ($method === null) {
-            throw new \InvalidArgumentException('Please set auth config method params');
+            throw new InvalidArgumentException('Please set auth config method params');
         }
 
         if (is_array($method)) {
@@ -91,7 +92,7 @@ abstract class AbstractAuth
         } else {
             $authenticator = new $method($identityRepository);
             if (!$authenticator instanceof AuthInterface) {
-                throw new \InvalidArgumentException(get_class($authenticator) . ' must implement ' . AuthInterface::class);
+                throw new InvalidArgumentException(get_class($authenticator) . ' must implement ' . AuthInterface::class);
             }
         }
         return $authenticator;
