@@ -5,6 +5,7 @@ namespace Lengbin\Auth;
 
 use Lengbin\Auth\Exception\InvalidArgumentException;
 use Lengbin\Auth\Method\CompositeAuth;
+use Lengbin\Auth\User\AccessCheckerInterface;
 use Lengbin\Auth\User\GuestIdentity;
 use Lengbin\Auth\User\User;
 use Lengbin\Helper\YiiSoft\Arrays\ArrayHelper;
@@ -156,6 +157,12 @@ abstract class AbstractAuth
         $identityClass = $this->getIdentityClass();
         $user = new User($identityClass, $this->eventDispatcher);
         $user->setIdentity($guestIdentity);
+
+        // 权限，如果没有 使用 rbac 扩展的话， 需要判断 一下
+        if ( $this->container->has(AccessCheckerInterface::class) ) {
+            $user->setAccessChecker($this->container->get(AccessCheckerInterface::class));
+        }
+
         if ($isPublic) {
             return $user;
         }
